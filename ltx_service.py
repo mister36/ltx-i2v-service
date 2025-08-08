@@ -1,0 +1,104 @@
+import os, tempfile, torch
+from typing import Optional, Tuple
+from PIL import Image
+from diffusers import LTXConditionPipeline, LTXLatentUpsamplePipeline
+from diffusers.pipelines.ltx.pipeline_ltx_condition import LTXVideoCondition
+from diffusers.utils import export_to_video, load_video
+
+def _round_to_vae(height: int, width: int, pipe) -> Tuple[int, int]:
+    ratio = getattr(pipe, "vae_spatial_compression_ratio", 32)
+    return height - (height % ratio), width - (width % ratio)
+
+class LTXService:
+    def __init__(
+        self,
+        base_model: str = "Lightricks/LTX-Video-0.9.8-dev",
+        upsampler_model: str = "Lightricks/ltxv-spatial-upscaler-0.9.8",
+        device: str = "cuda",
+        dtype = torch.bfloat16,
+    ):
+        self.pipe = LTXConditionPipeline.from_pretrained(base_model, torch_dtype=dtype)
+        self.pipe_upsample = LTXLatentUpsamplePipeline.from_pretrained(
+            upsampler_model, vae=self.pipe.vae, torch_dtype=dtype
+        )
+        self.pipe.to(device)
+        self.pipe_upsample.to(device)
+        self.pipe.vae.enable_tiling()
+        self.device = device
+        self.dtype = dtype
+
+    def image_to_video(
+        self,
+        image_pil: Image.Image,
+        prompt: str,
+        *,
+        negative_prompt: str = "worst quality, inconsistent motion, blurry, jittery, distorted",
+        expected_height: int = 480,
+        expected_width: int = 832,
+        downscale_factor: float = 2/3,
+        num_frames: int = 96,
+        steps_lowres: int = 30,
+        steps_refine: int = 10,
+        denoise_strength: float = 0.4,
+        decode_timestep: float = 0.05,
+        image_cond_noise_scale: float = 0.025,
+        fps: int = 24,
+        seed: int = 0,
+    ) -> str:
+        # compress the single image into a 1-frame video (as in docs)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_vid:
+            export_to_video([image_pil], tmp_vid.name, fps=1)
+            video = load_video(tmp_vid.name)
+
+        condition = LTXVideoCondition(video=video, frame_index=0)
+
+        # Part 1: generate at smaller resolution (rounded to VAE grid)
+        h0 = int(expected_height * downscale_factor)
+        w0 = int(expected_width * downscale_factor)
+        h0, w0 = _round_to_vae(h0, w0, self.pipe)
+
+        gen = torch.Generator(device=self.device).manual_seed(seed)
+        lowres_latents = self.pipe(
+            conditions=[condition],
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=w0,
+            height=h0,
+            num_frames=num_frames,
+            num_inference_steps=steps_lowres,
+            generator=gen,
+            output_type="latent",
+        ).frames
+
+        # Part 2: latent upsample (2x spatial)
+        up_latents = self.pipe_upsample(
+            latents=lowres_latents,
+            output_type="latent"
+        ).frames
+
+        # Part 3: light denoise/refine
+        h_up, w_up = h0 * 2, w0 * 2
+        video_frames = self.pipe(
+            conditions=[condition],
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=w_up,
+            height=h_up,
+            num_frames=num_frames,
+            denoise_strength=denoise_strength,
+            num_inference_steps=steps_refine,
+            latents=up_latents,
+            decode_timestep=decode_timestep,
+            image_cond_noise_scale=image_cond_noise_scale,
+            generator=gen,
+            output_type="pil",
+        ).frames[0]
+
+        # Part 4: resize to requested output resolution
+        video_frames = [f.resize((expected_width, expected_height), Image.Resampling.LANCZOS)
+                        for f in video_frames]
+
+        # Write to a temp mp4, return path
+        out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        export_to_video(video_frames, out.name, fps=fps)
+        return out.name
