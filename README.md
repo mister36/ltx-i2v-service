@@ -1,6 +1,6 @@
 # LTX I2V Service
 
-FastAPI wrapper around LTX-Video 0.9.8 docs flow (low-res → latent upsample → refine).
+FastAPI wrapper around LTX-Video 0.9.7 docs flow (low-res → latent upsample → refine).
 
 ### Run locally (GPU)
 
