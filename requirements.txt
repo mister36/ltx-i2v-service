@@ -4,3 +4,5 @@ diffusers>=0.30.0
 transformers
 accelerate
 pillow
+python-multipart
+sentencepiece
