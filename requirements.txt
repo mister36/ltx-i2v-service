@@ -6,3 +6,4 @@ accelerate
 pillow
 python-multipart
 sentencepiece
+opencv-python
