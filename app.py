@@ -10,7 +10,7 @@ svc = None
 @app.on_event("startup")
 def _load():
     global svc
-    base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.7-distilled")
+    base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.7-dev")
     up   = os.getenv("UPSAMPLER_ID", "Lightricks/ltxv-spatial-upscaler-0.9.7")
     svc = LTXService(base_model=base, upsampler_model=up)
 

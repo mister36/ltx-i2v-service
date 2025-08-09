@@ -12,7 +12,7 @@ def _round_to_vae(height: int, width: int, pipe) -> Tuple[int, int]:
 class LTXService:
     def __init__(
         self,
-        base_model: str = "Lightricks/LTX-Video-0.9.7-distilled",
+        base_model: str = "Lightricks/LTX-Video-0.9.7-dev",
         upsampler_model: str = "Lightricks/ltxv-spatial-upscaler-0.9.7",
         device: str = "cuda",
         dtype = torch.bfloat16,
