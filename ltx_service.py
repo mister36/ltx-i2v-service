@@ -45,7 +45,6 @@ class LTXService:
         image_cond_noise_scale: float = 0.025,
         fps: int = 30,  # 30 FPS as recommended
         guidance_scale: float = 3.2,  # Recommended range 3-3.5
-        enhance_prompt: bool = True,  # Enable automatic prompt enhancement
         seed: int = 0,
     ) -> str:
         # compress the single image into a 1-frame video (as in docs)
@@ -71,7 +70,7 @@ class LTXService:
             "height": h0,
             "num_frames": num_frames,
             "num_inference_steps": steps_lowres,
-            "enhance_prompt": enhance_prompt,
+
             "generator": gen,
             "output_type": "latent",
         }
@@ -99,7 +98,7 @@ class LTXService:
             "num_frames": num_frames,
             "denoise_strength": denoise_strength,
             "num_inference_steps": steps_refine,
-            "enhance_prompt": enhance_prompt,
+
             "latents": up_latents,
             "decode_timestep": decode_timestep,
             "image_cond_noise_scale": image_cond_noise_scale,

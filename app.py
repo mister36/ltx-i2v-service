@@ -32,7 +32,6 @@ async def i2v(
     image_cond_noise_scale: float = Form(0.025),
     fps: int = Form(30),  # Default to 30 FPS as recommended
     guidance_scale: float = Form(3.2),  # Recommended range 3-3.5
-    enhance_prompt: bool = Form(True),  # Enable automatic prompt enhancement
 
     seed: int = Form(0),
 ):
@@ -76,7 +75,6 @@ async def i2v(
         image_cond_noise_scale=image_cond_noise_scale,
         fps=fps,
         guidance_scale=guidance_scale,
-        enhance_prompt=enhance_prompt,
         seed=seed,
     )
     def _stream():
