@@ -12,7 +12,7 @@ def _round_to_vae(height: int, width: int, pipe) -> Tuple[int, int]:
 class LTXService:
     def __init__(
         self,
-        base_model: str = "Lightricks/LTX-Video-0.9.7-dev",
+        base_model: str = "Lightricks/LTX-Video-0.9.8-13B-distilled",
         upsampler_model: str = "Lightricks/ltxv-spatial-upscaler-0.9.7",
         device: str = "cuda",
         dtype = torch.bfloat16,
@@ -26,6 +26,7 @@ class LTXService:
         self.pipe.vae.enable_tiling()
         self.device = device
         self.dtype = dtype
+        self.is_distilled = "distilled" in base_model.lower()
 
     def image_to_video(
         self,
@@ -34,15 +35,17 @@ class LTXService:
         *,
         negative_prompt: str = "worst quality, inconsistent motion, blurry, jittery, distorted",
         expected_height: int = 480,
-        expected_width: int = 832,
+        expected_width: int = 704,  # Better default based on guide
         downscale_factor: float = 2/3,
         num_frames: int = 96,
-        steps_lowres: int = 30,
-        steps_refine: int = 10,
+        steps_lowres: int = 40,  # More steps for better quality
+        steps_refine: int = 15,
         denoise_strength: float = 0.4,
         decode_timestep: float = 0.05,
         image_cond_noise_scale: float = 0.025,
-        fps: int = 24,
+        fps: int = 30,  # 30 FPS as recommended
+        guidance_scale: float = 3.2,  # Recommended range 3-3.5
+        enhance_prompt: bool = True,  # Enable automatic prompt enhancement
         seed: int = 0,
     ) -> str:
         # compress the single image into a 1-frame video (as in docs)
@@ -58,17 +61,25 @@ class LTXService:
         h0, w0 = _round_to_vae(h0, w0, self.pipe)
 
         gen = torch.Generator(device=self.device).manual_seed(seed)
-        lowres_latents = self.pipe(
-            conditions=[condition],
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=w0,
-            height=h0,
-            num_frames=num_frames,
-            num_inference_steps=steps_lowres,
-            generator=gen,
-            output_type="latent",
-        ).frames
+        
+        # Distilled models don't need guidance_scale
+        pipe_kwargs = {
+            "conditions": [condition],
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "width": w0,
+            "height": h0,
+            "num_frames": num_frames,
+            "num_inference_steps": steps_lowres,
+            "enhance_prompt": enhance_prompt,
+            "generator": gen,
+            "output_type": "latent",
+        }
+        
+        if not self.is_distilled:
+            pipe_kwargs["guidance_scale"] = guidance_scale
+            
+        lowres_latents = self.pipe(**pipe_kwargs).frames
 
         # Part 2: latent upsample (2x spatial)
         up_latents = self.pipe_upsample(
@@ -78,21 +89,28 @@ class LTXService:
 
         # Part 3: light denoise/refine
         h_up, w_up = h0 * 2, w0 * 2
-        video_frames = self.pipe(
-            conditions=[condition],
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=w_up,
-            height=h_up,
-            num_frames=num_frames,
-            denoise_strength=denoise_strength,
-            num_inference_steps=steps_refine,
-            latents=up_latents,
-            decode_timestep=decode_timestep,
-            image_cond_noise_scale=image_cond_noise_scale,
-            generator=gen,
-            output_type="pil",
-        ).frames[0]
+        # Refinement step
+        refine_kwargs = {
+            "conditions": [condition],
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "width": w_up,
+            "height": h_up,
+            "num_frames": num_frames,
+            "denoise_strength": denoise_strength,
+            "num_inference_steps": steps_refine,
+            "enhance_prompt": enhance_prompt,
+            "latents": up_latents,
+            "decode_timestep": decode_timestep,
+            "image_cond_noise_scale": image_cond_noise_scale,
+            "generator": gen,
+            "output_type": "pil",
+        }
+        
+        if not self.is_distilled:
+            refine_kwargs["guidance_scale"] = guidance_scale
+            
+        video_frames = self.pipe(**refine_kwargs).frames[0]
 
         # Part 4: resize to requested output resolution
         video_frames = [f.resize((expected_width, expected_height), Image.Resampling.LANCZOS)

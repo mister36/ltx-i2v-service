@@ -10,8 +10,9 @@ svc = None
 @app.on_event("startup")
 def _load():
     global svc
-    base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.7-dev")
-    up   = os.getenv("UPSAMPLER_ID", "Lightricks/ltxv-spatial-upscaler-0.9.7")
+    # Use only the distilled model
+    base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.8-13B-distilled")
+    up = os.getenv("UPSAMPLER_ID", "Lightricks/ltxv-spatial-upscaler-0.9.7")
     svc = LTXService(base_model=base, upsampler_model=up)
 
 @app.post("/i2v")
@@ -21,15 +22,18 @@ async def i2v(
     negative_prompt: str = Form("worst quality, inconsistent motion, blurry, jittery, distorted"),
     expected_height: int = Form(None),
     expected_width: int  = Form(None),
-    max_dimension: int = Form(832),  # Maximum dimension for scaling
+    max_dimension: int = Form(704),  # Maximum dimension for scaling (model works best under 720x1280)
     downscale_factor: float = Form(2/3),
     num_frames: int = Form(96),
-    steps_lowres: int = Form(30),
-    steps_refine: int = Form(10),
+    steps_lowres: int = Form(40),  # More steps for better quality
+    steps_refine: int = Form(15),
     denoise_strength: float = Form(0.4),
     decode_timestep: float = Form(0.05),
     image_cond_noise_scale: float = Form(0.025),
-    fps: int = Form(24),
+    fps: int = Form(30),  # Default to 30 FPS as recommended
+    guidance_scale: float = Form(3.2),  # Recommended range 3-3.5
+    enhance_prompt: bool = Form(True),  # Enable automatic prompt enhancement
+
     seed: int = Form(0),
 ):
     data = await image.read()
@@ -50,9 +54,14 @@ async def i2v(
             expected_height = max_dimension
             expected_width = int(max_dimension * aspect_ratio)
         
-        # Round to multiples of 8 for better model compatibility
-        expected_width = (expected_width // 8) * 8
-        expected_height = (expected_height // 8) * 8
+        # Round to multiples of 32 for VAE compatibility (better than 8)
+        expected_width = (expected_width // 32) * 32
+        expected_height = (expected_height // 32) * 32
+        
+        # Ensure we don't go below minimum viable resolution
+        expected_width = max(expected_width, 256)
+        expected_height = max(expected_height, 256)
+    
     mp4_path = svc.image_to_video(
         img, prompt,
         negative_prompt=negative_prompt,
@@ -66,6 +75,8 @@ async def i2v(
         decode_timestep=decode_timestep,
         image_cond_noise_scale=image_cond_noise_scale,
         fps=fps,
+        guidance_scale=guidance_scale,
+        enhance_prompt=enhance_prompt,
         seed=seed,
     )
     def _stream():
