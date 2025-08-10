@@ -9,3 +9,5 @@ sentencepiece
 opencv-python
 imageio 
 imageio-ffmpeg
+insightface
+controlnet-aux

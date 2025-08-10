@@ -1,0 +1,174 @@
+import os
+import cv2
+import torch
+import numpy as np
+import tempfile
+from typing import Optional
+from PIL import Image
+from huggingface_hub import hf_hub_download
+from insightface.app import FaceAnalysis
+from diffusers.models import ControlNetModel
+from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline, draw_kps
+
+
+class InstantIDService:
+    def __init__(
+        self,
+        base_model: str = "SG161222/RealVisXL_V5.0",  # Using RealVisXL V5.0 as requested
+        device: str = "cuda",
+        dtype=torch.float16,
+        checkpoints_dir: str = "./checkpoints",
+        models_dir: str = "./models",
+    ):
+        self.device = device
+        self.dtype = dtype
+        self.checkpoints_dir = checkpoints_dir
+        self.models_dir = models_dir
+        
+        # Ensure directories exist
+        os.makedirs(checkpoints_dir, exist_ok=True)
+        os.makedirs(models_dir, exist_ok=True)
+        
+        # Download InstantID models if not present
+        self._download_models()
+        
+        # Initialize face analysis
+        self.app = FaceAnalysis(
+            name='antelopev2', 
+            root=models_dir, 
+            providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+        )
+        self.app.prepare(ctx_id=0, det_size=(640, 640))
+        
+        # Load ControlNet
+        controlnet_path = os.path.join(checkpoints_dir, "ControlNetModel")
+        self.controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=dtype)
+        
+        # Load pipeline with RealVisXL V5.0
+        self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
+            base_model, 
+            controlnet=self.controlnet, 
+            torch_dtype=dtype
+        )
+        self.pipe.to(device)
+        
+        # Load IP adapter
+        face_adapter_path = os.path.join(checkpoints_dir, "ip-adapter.bin")
+        self.pipe.load_ip_adapter_instantid(face_adapter_path)
+        
+    def _download_models(self):
+        """Download InstantID models from HuggingFace Hub"""
+        try:
+            # Download ControlNet model
+            hf_hub_download(
+                repo_id="InstantX/InstantID", 
+                filename="ControlNetModel/config.json", 
+                local_dir=self.checkpoints_dir
+            )
+            hf_hub_download(
+                repo_id="InstantX/InstantID", 
+                filename="ControlNetModel/diffusion_pytorch_model.safetensors", 
+                local_dir=self.checkpoints_dir
+            )
+            
+            # Download IP adapter
+            hf_hub_download(
+                repo_id="InstantX/InstantID", 
+                filename="ip-adapter.bin", 
+                local_dir=self.checkpoints_dir
+            )
+            
+            print("InstantID models downloaded successfully")
+            
+        except Exception as e:
+            print(f"Error downloading models: {e}")
+            raise
+    
+    def generate_consistent_image(
+        self,
+        face_image: Image.Image,
+        prompt: str,
+        negative_prompt: str = "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch, deformed, mutated, cross-eyed, ugly, disfigured",
+        width: int = 1024,
+        height: int = 1024,
+        num_inference_steps: int = 30,
+        guidance_scale: float = 7.5,
+        ip_adapter_scale: float = 0.8,
+        controlnet_conditioning_scale: float = 0.8,
+        seed: Optional[int] = None,
+    ) -> Image.Image:
+        """
+        Generate a consistent image given a face image and prompt
+        
+        Args:
+            face_image: PIL Image containing the face to preserve
+            prompt: Text prompt for image generation
+            negative_prompt: Negative prompt for image generation
+            width: Output image width
+            height: Output image height
+            num_inference_steps: Number of denoising steps
+            guidance_scale: Guidance scale for generation
+            ip_adapter_scale: Scale for IP adapter influence
+            controlnet_conditioning_scale: Scale for ControlNet conditioning
+            seed: Random seed for reproducibility
+            
+        Returns:
+            Generated PIL Image
+        """
+        # Prepare face embedding
+        face_info = self.app.get(cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR))
+        
+        if not face_info:
+            raise ValueError("No face detected in the input image")
+        
+        # Use the largest face
+        face_info = sorted(
+            face_info, 
+            key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1])
+        )[-1]
+        
+        face_emb = face_info['embedding']
+        face_kps = draw_kps(face_image, face_info['kps'])
+        
+        # Set IP adapter scale
+        self.pipe.set_ip_adapter_scale(ip_adapter_scale)
+        
+        # Set random seed if provided
+        generator = None
+        if seed is not None:
+            generator = torch.Generator(device=self.device).manual_seed(seed)
+        
+        # Generate image
+        result = self.pipe(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            image_embeds=torch.from_numpy(face_emb).unsqueeze(0).to(self.device),
+            image=face_kps,
+            width=width,
+            height=height,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            controlnet_conditioning_scale=controlnet_conditioning_scale,
+            generator=generator,
+        )
+        
+        return result.images[0]
+    
+    def generate_to_file(
+        self,
+        face_image: Image.Image,
+        prompt: str,
+        **kwargs
+    ) -> str:
+        """
+        Generate image and save to temporary file
+        
+        Returns:
+            Path to the generated image file
+        """
+        generated_image = self.generate_consistent_image(face_image, prompt, **kwargs)
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            generated_image.save(tmp_file.name)
+            return tmp_file.name
