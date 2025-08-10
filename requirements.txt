@@ -9,5 +9,6 @@ sentencepiece
 opencv-python
 imageio 
 imageio-ffmpeg
+onnxruntime
 insightface
 controlnet-aux
