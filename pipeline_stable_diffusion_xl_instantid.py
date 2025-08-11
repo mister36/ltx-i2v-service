@@ -56,7 +56,7 @@ class StableDiffusionXLInstantIDPipeline(StableDiffusionXLPipeline):
         unet,
         scheduler,
         controlnet=None,
-        requires_safety_checker=True,
+        requires_safety_checker=False,
         safety_checker=None,
         feature_extractor=None,
         force_zeros_for_empty_prompt=True,

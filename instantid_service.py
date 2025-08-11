@@ -52,10 +52,29 @@ class InstantIDService:
         self.controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=dtype)
         
         # Load pipeline with RealVisXL V5.0
-        self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
+        # First load the base SDXL pipeline
+        from diffusers import StableDiffusionXLPipeline
+        base_pipe = StableDiffusionXLPipeline.from_pretrained(
             base_model, 
-            controlnet=self.controlnet, 
-            torch_dtype=dtype
+            torch_dtype=dtype,
+            variant="fp16" if dtype == torch.float16 else None,
+            use_safetensors=True
+        )
+        
+        # Create our custom pipeline with the loaded components
+        self.pipe = StableDiffusionXLInstantIDPipeline(
+            vae=base_pipe.vae,
+            text_encoder=base_pipe.text_encoder,
+            text_encoder_2=base_pipe.text_encoder_2,
+            tokenizer=base_pipe.tokenizer,
+            tokenizer_2=base_pipe.tokenizer_2,
+            unet=base_pipe.unet,
+            scheduler=base_pipe.scheduler,
+            controlnet=self.controlnet,
+            requires_safety_checker=False,
+            safety_checker=None,
+            feature_extractor=getattr(base_pipe, 'feature_extractor', None),
+            force_zeros_for_empty_prompt=True,
         )
         
         # Apply memory optimizations
