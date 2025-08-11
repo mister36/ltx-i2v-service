@@ -71,8 +71,7 @@ class InstantIDService:
             unet=base_pipe.unet,
             scheduler=base_pipe.scheduler,
             controlnet=self.controlnet,
-            requires_safety_checker=False,
-            safety_checker=None,
+            safety_checker=getattr(base_pipe, 'safety_checker', None),
             feature_extractor=getattr(base_pipe, 'feature_extractor', None),
             force_zeros_for_empty_prompt=True,
         )
