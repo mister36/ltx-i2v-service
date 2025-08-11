@@ -109,32 +109,45 @@ class InstantIDService:
                 local_dir=self.checkpoints_dir
             )
             
-            # Download InsightFace AntelopeV2 models
-            insightface_models_dir = os.path.join(self.models_dir, "insightface", "models", "antelopev2")
-            os.makedirs(insightface_models_dir, exist_ok=True)
-            
-            # Download all required AntelopeV2 model files from working repository
-            antelopev2_files = [
-                "1k3d68.onnx",
-                "2d106det.onnx", 
-                "genderage.onnx",
-                "glintr100.onnx",
-                "scrfd_10g_bnkps.onnx"  # This is the detection model for antelopev2
-            ]
-            
-            for filename in antelopev2_files:
-                print(f"Downloading {filename}...")
-                hf_hub_download(
-                    repo_id="MonsterMMORPG/tools",
-                    filename=f"antelopev2/{filename}",
-                    local_dir=insightface_models_dir
-                )
+            # Download InsightFace AntelopeV2 models from official source
+            self._download_antelopev2_models()
             
             print("InstantID models downloaded successfully")
             
         except Exception as e:
             print(f"Error downloading models: {e}")
             raise
+
+    def _download_antelopev2_models(self):
+        """Download AntelopeV2 models from official InsightFace releases"""
+        import urllib.request
+        import zipfile
+        
+        insightface_models_dir = os.path.join(self.models_dir, "insightface", "models")
+        antelopev2_dir = os.path.join(insightface_models_dir, "antelopev2")
+        
+        # Check if models already exist
+        if os.path.exists(antelopev2_dir) and len(os.listdir(antelopev2_dir)) >= 5:
+            print("AntelopeV2 models already exist, skipping download")
+            return
+            
+        os.makedirs(insightface_models_dir, exist_ok=True)
+        
+        # Download from official InsightFace releases
+        antelopev2_url = "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip"
+        zip_path = os.path.join(insightface_models_dir, "antelopev2.zip")
+        
+        print("Downloading AntelopeV2 models from official InsightFace releases...")
+        urllib.request.urlretrieve(antelopev2_url, zip_path)
+        
+        print("Extracting AntelopeV2 models...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(insightface_models_dir)
+        
+        # Clean up zip file
+        os.remove(zip_path)
+        
+        print("AntelopeV2 models downloaded and extracted successfully")
     
     def generate_consistent_image(
         self,
