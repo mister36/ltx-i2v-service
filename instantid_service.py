@@ -77,17 +77,25 @@ class InstantIDService:
         )
         
         # Apply memory optimizations
-        if enable_sequential_cpu_offload:
-            # Most aggressive memory saving - keeps only active components on GPU
-            print("Enabling sequential CPU offload for InstantID pipeline")
-            self.pipe.enable_sequential_cpu_offload()
-        elif enable_cpu_offload:
-            # Moderate memory saving - keeps some components on GPU
-            print("Enabling CPU offload for InstantID pipeline")
-            self.pipe.enable_model_cpu_offload()
-        else:
-            # Keep everything on GPU (original behavior)
+        # Temporarily disable CPU offload for InstantID pipeline due to component compatibility issues
+        # TODO: Fix CPU offload compatibility with custom pipeline
+        print("Keeping InstantID pipeline on GPU (CPU offload temporarily disabled)")
+        if device != "cpu":
             self.pipe.to(device)
+        
+        # Note: CPU offload is disabled for now due to component registration issues
+        # The custom pipeline structure conflicts with diffusers' expected component layout
+        # if enable_sequential_cpu_offload:
+        #     # Most aggressive memory saving - keeps only active components on GPU
+        #     print("Enabling sequential CPU offload for InstantID pipeline")
+        #     self.pipe.enable_sequential_cpu_offload()
+        # elif enable_cpu_offload:
+        #     # Moderate memory saving - keeps some components on GPU
+        #     print("Enabling CPU offload for InstantID pipeline")
+        #     self.pipe.enable_model_cpu_offload()
+        # else:
+        #     # Keep everything on GPU (original behavior)
+        #     self.pipe.to(device)
             
         # Enable VAE tiling and attention slicing for lower memory usage
         if hasattr(self.pipe, 'vae'):

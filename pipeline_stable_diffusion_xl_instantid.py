@@ -83,10 +83,13 @@ class StableDiffusionXLInstantIDPipeline(StableDiffusionXLPipeline):
         
         super().__init__(**init_kwargs)
         
+        # Store additional components as instance attributes without registering them as pipeline components
+        # This avoids conflicts with the expected pipeline component structure
+        self.controlnet = controlnet
+        self.feature_extractor = feature_extractor
+        
         # Store these attributes separately since newer diffusers doesn't use them in __init__
         self.safety_checker = safety_checker
-        self.feature_extractor = feature_extractor
-        self.controlnet = controlnet
         self.ip_adapter_scale = 1.0
         
     def load_ip_adapter_instantid(self, model_path: str):
