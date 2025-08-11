@@ -109,6 +109,27 @@ class InstantIDService:
                 local_dir=self.checkpoints_dir
             )
             
+            # Download InsightFace AntelopeV2 models
+            insightface_models_dir = os.path.join(self.models_dir, "insightface", "models", "antelopev2")
+            os.makedirs(insightface_models_dir, exist_ok=True)
+            
+            # Download all required AntelopeV2 model files
+            antelopev2_files = [
+                "1k3d68.onnx",
+                "2d106det.onnx", 
+                "det_10g.onnx",
+                "genderage.onnx",
+                "w600k_r50.onnx"
+            ]
+            
+            for filename in antelopev2_files:
+                print(f"Downloading {filename}...")
+                hf_hub_download(
+                    repo_id="DIAMONIK7777/antelopev2",
+                    filename=filename,
+                    local_dir=insightface_models_dir
+                )
+            
             print("InstantID models downloaded successfully")
             
         except Exception as e:
