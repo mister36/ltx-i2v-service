@@ -62,20 +62,30 @@ class StableDiffusionXLInstantIDPipeline(StableDiffusionXLPipeline):
         add_watermarker=None,
         **kwargs
     ):
-        super().__init__(
-            vae=vae,
-            text_encoder=text_encoder,
-            text_encoder_2=text_encoder_2,
-            tokenizer=tokenizer,
-            tokenizer_2=tokenizer_2,
-            unet=unet,
-            scheduler=scheduler,
-            safety_checker=safety_checker,
-            feature_extractor=feature_extractor,
-            force_zeros_for_empty_prompt=force_zeros_for_empty_prompt,
-            add_watermarker=add_watermarker,
-            **kwargs
-        )
+        # Filter out parameters that are not accepted by newer versions of diffusers
+        init_kwargs = {
+            'vae': vae,
+            'text_encoder': text_encoder,
+            'text_encoder_2': text_encoder_2,
+            'tokenizer': tokenizer,
+            'tokenizer_2': tokenizer_2,
+            'unet': unet,
+            'scheduler': scheduler,
+            'force_zeros_for_empty_prompt': force_zeros_for_empty_prompt,
+        }
+        
+        # Only add add_watermarker if it's not None
+        if add_watermarker is not None:
+            init_kwargs['add_watermarker'] = add_watermarker
+        
+        # Add any additional kwargs
+        init_kwargs.update(kwargs)
+        
+        super().__init__(**init_kwargs)
+        
+        # Store these attributes separately since newer diffusers doesn't use them in __init__
+        self.safety_checker = safety_checker
+        self.feature_extractor = feature_extractor
         self.controlnet = controlnet
         self.ip_adapter_scale = 1.0
         
