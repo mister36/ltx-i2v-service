@@ -6,9 +6,5 @@ accelerate
 pillow
 python-multipart
 sentencepiece
-opencv-python
 imageio 
 imageio-ffmpeg
-onnxruntime
-insightface
-controlnet-aux

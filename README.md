@@ -2,6 +2,8 @@
 
 FastAPI wrapper around LTX-Video 0.9.7 docs flow (low-res → latent upsample → refine).
 
+**Note**: The InstantID functionality has been moved to a separate service. See the `realvisxl-instantid-service` folder for RealVisXL/InstantID image generation.
+
 ### Run locally (GPU)
 
 ```bash
