@@ -3,6 +3,7 @@ import cv2
 import torch
 import numpy as np
 import tempfile
+import gc
 from typing import Optional
 from PIL import Image
 from huggingface_hub import hf_hub_download
@@ -19,11 +20,17 @@ class InstantIDService:
         dtype=torch.float16,
         checkpoints_dir: str = "./checkpoints",
         models_dir: str = "./models",
+        enable_cpu_offload: bool = True,  # Enable CPU offloading by default
+        enable_sequential_cpu_offload: bool = False,  # For extreme memory savings
     ):
         self.device = device
         self.dtype = dtype
         self.checkpoints_dir = checkpoints_dir
         self.models_dir = models_dir
+        self.enable_cpu_offload = enable_cpu_offload
+        self.enable_sequential_cpu_offload = enable_sequential_cpu_offload
+        
+        print(f"Loading InstantID models with CPU offload: {enable_cpu_offload}, Sequential offload: {enable_sequential_cpu_offload}")
         
         # Ensure directories exist
         os.makedirs(checkpoints_dir, exist_ok=True)
@@ -50,11 +57,35 @@ class InstantIDService:
             controlnet=self.controlnet, 
             torch_dtype=dtype
         )
-        self.pipe.to(device)
+        
+        # Apply memory optimizations
+        if enable_sequential_cpu_offload:
+            # Most aggressive memory saving - keeps only active components on GPU
+            print("Enabling sequential CPU offload for InstantID pipeline")
+            self.pipe.enable_sequential_cpu_offload()
+        elif enable_cpu_offload:
+            # Moderate memory saving - keeps some components on GPU
+            print("Enabling CPU offload for InstantID pipeline")
+            self.pipe.enable_model_cpu_offload()
+        else:
+            # Keep everything on GPU (original behavior)
+            self.pipe.to(device)
+            
+        # Enable VAE tiling and attention slicing for lower memory usage
+        if hasattr(self.pipe, 'vae'):
+            self.pipe.vae.enable_tiling()
+        self.pipe.enable_attention_slicing(1)
         
         # Load IP adapter
         face_adapter_path = os.path.join(checkpoints_dir, "ip-adapter.bin")
         self.pipe.load_ip_adapter_instantid(face_adapter_path)
+        
+    def clear_memory(self):
+        """Clear GPU memory cache and run garbage collection"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        print("Cleared GPU memory cache")
         
     def _download_models(self):
         """Download InstantID models from HuggingFace Hub"""
@@ -151,6 +182,9 @@ class InstantIDService:
             controlnet_conditioning_scale=controlnet_conditioning_scale,
             generator=generator,
         )
+        
+        # Clear memory after generation
+        self.clear_memory()
         
         return result.images[0]
     

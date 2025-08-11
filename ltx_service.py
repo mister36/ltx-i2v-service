@@ -1,4 +1,4 @@
-import os, tempfile, torch
+import os, tempfile, torch, gc
 from typing import Optional, Tuple
 from PIL import Image
 from diffusers import LTXConditionPipeline, LTXLatentUpsamplePipeline
@@ -16,17 +16,52 @@ class LTXService:
         upsampler_model: str = "Lightricks/ltxv-spatial-upscaler-0.9.7",
         device: str = "cuda",
         dtype = torch.bfloat16,
+        enable_cpu_offload: bool = True,  # Enable CPU offloading by default
+        enable_sequential_cpu_offload: bool = False,  # For extreme memory savings
     ):
+        self.device = device
+        self.dtype = dtype
+        self.is_distilled = "distilled" in base_model.lower()
+        self.enable_cpu_offload = enable_cpu_offload
+        self.enable_sequential_cpu_offload = enable_sequential_cpu_offload
+        
+        print(f"Loading LTX models with CPU offload: {enable_cpu_offload}, Sequential offload: {enable_sequential_cpu_offload}")
+        
+        # Load pipelines
         self.pipe = LTXConditionPipeline.from_pretrained(base_model, torch_dtype=dtype)
         self.pipe_upsample = LTXLatentUpsamplePipeline.from_pretrained(
             upsampler_model, vae=self.pipe.vae, torch_dtype=dtype
         )
-        self.pipe.to(device)
-        self.pipe_upsample.to(device)
+        
+        # Apply memory optimizations
+        if enable_sequential_cpu_offload:
+            # Most aggressive memory saving - keeps only active components on GPU
+            print("Enabling sequential CPU offload for maximum memory efficiency")
+            self.pipe.enable_sequential_cpu_offload()
+            self.pipe_upsample.enable_sequential_cpu_offload()
+        elif enable_cpu_offload:
+            # Moderate memory saving - keeps some components on GPU
+            print("Enabling CPU offload for memory efficiency")
+            self.pipe.enable_model_cpu_offload()
+            self.pipe_upsample.enable_model_cpu_offload()
+        else:
+            # Keep everything on GPU (original behavior)
+            self.pipe.to(device)
+            self.pipe_upsample.to(device)
+            
+        # Enable VAE tiling for lower memory usage
         self.pipe.vae.enable_tiling()
-        self.device = device
-        self.dtype = dtype
-        self.is_distilled = "distilled" in base_model.lower()
+        
+        # Enable attention slicing for lower memory usage
+        self.pipe.enable_attention_slicing(1)
+        self.pipe_upsample.enable_attention_slicing(1)
+        
+    def clear_memory(self):
+        """Clear GPU memory cache and run garbage collection"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        print("Cleared GPU memory cache")
 
     def image_to_video(
         self,
@@ -118,4 +153,8 @@ class LTXService:
         # Write to a temp mp4, return path
         out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         export_to_video(video_frames, out.name, fps=fps)
+        
+        # Clear memory after generation
+        self.clear_memory()
+        
         return out.name
