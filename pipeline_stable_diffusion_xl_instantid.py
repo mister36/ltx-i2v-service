@@ -46,8 +46,38 @@ class StableDiffusionXLInstantIDPipeline(StableDiffusionXLPipeline):
     Pipeline for Stable Diffusion XL with InstantID
     """
     
-    def __init__(self, *args, controlnet=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        vae,
+        text_encoder,
+        text_encoder_2,
+        tokenizer,
+        tokenizer_2,
+        unet,
+        scheduler,
+        controlnet=None,
+        requires_safety_checker=True,
+        safety_checker=None,
+        feature_extractor=None,
+        force_zeros_for_empty_prompt=True,
+        add_watermarker=None,
+        **kwargs
+    ):
+        super().__init__(
+            vae=vae,
+            text_encoder=text_encoder,
+            text_encoder_2=text_encoder_2,
+            tokenizer=tokenizer,
+            tokenizer_2=tokenizer_2,
+            unet=unet,
+            scheduler=scheduler,
+            requires_safety_checker=requires_safety_checker,
+            safety_checker=safety_checker,
+            feature_extractor=feature_extractor,
+            force_zeros_for_empty_prompt=force_zeros_for_empty_prompt,
+            add_watermarker=add_watermarker,
+            **kwargs
+        )
         self.controlnet = controlnet
         self.ip_adapter_scale = 1.0
         
