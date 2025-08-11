@@ -113,20 +113,20 @@ class InstantIDService:
             insightface_models_dir = os.path.join(self.models_dir, "insightface", "models", "antelopev2")
             os.makedirs(insightface_models_dir, exist_ok=True)
             
-            # Download all required AntelopeV2 model files
+            # Download all required AntelopeV2 model files from working repository
             antelopev2_files = [
                 "1k3d68.onnx",
                 "2d106det.onnx", 
-                "det_10g.onnx",
                 "genderage.onnx",
-                "w600k_r50.onnx"
+                "glintr100.onnx",
+                "scrfd_10g_bnkps.onnx"  # This is the detection model for antelopev2
             ]
             
             for filename in antelopev2_files:
                 print(f"Downloading {filename}...")
                 hf_hub_download(
-                    repo_id="DIAMONIK7777/antelopev2",
-                    filename=filename,
+                    repo_id="MonsterMMORPG/tools",
+                    filename=f"antelopev2/{filename}",
                     local_dir=insightface_models_dir
                 )
             
