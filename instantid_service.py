@@ -39,10 +39,10 @@ class InstantIDService:
         # Download InstantID models if not present
         self._download_models()
         
-        # Initialize face analysis
+        # Initialize face analysis - root should point to directory containing models/antelopev2
         self.app = FaceAnalysis(
             name='antelopev2', 
-            root=models_dir, 
+            root='./', 
             providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
         )
         self.app.prepare(ctx_id=0, det_size=(640, 640))
@@ -123,26 +123,27 @@ class InstantIDService:
         import urllib.request
         import zipfile
         
-        insightface_models_dir = os.path.join(self.models_dir, "insightface", "models")
-        antelopev2_dir = os.path.join(insightface_models_dir, "antelopev2")
+        # Place models in ./models/antelopev2 as expected by InsightFace with root='./'
+        models_base_dir = "./models"
+        antelopev2_dir = os.path.join(models_base_dir, "antelopev2")
         
         # Check if models already exist
         if os.path.exists(antelopev2_dir) and len(os.listdir(antelopev2_dir)) >= 5:
             print("AntelopeV2 models already exist, skipping download")
             return
             
-        os.makedirs(insightface_models_dir, exist_ok=True)
+        os.makedirs(models_base_dir, exist_ok=True)
         
         # Download from official InsightFace releases
         antelopev2_url = "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip"
-        zip_path = os.path.join(insightface_models_dir, "antelopev2.zip")
+        zip_path = os.path.join(models_base_dir, "antelopev2.zip")
         
         print("Downloading AntelopeV2 models from official InsightFace releases...")
         urllib.request.urlretrieve(antelopev2_url, zip_path)
         
         print("Extracting AntelopeV2 models...")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(insightface_models_dir)
+            zip_ref.extractall(models_base_dir)
         
         # Clean up zip file
         os.remove(zip_path)
