@@ -9,45 +9,37 @@ app = FastAPI()
 svc = None
 instantid_svc = None
 
-def _get_ltx_service():
-    """Lazy load LTX service only when needed"""
-    global svc
-    if svc is None:
-        print("Loading LTX Video service...")
-        base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.8-13B-distilled")
-        up = os.getenv("UPSAMPLER_ID", "Lightricks/ltxv-spatial-upscaler-0.9.7")
-        
-        # Memory optimization settings
-        enable_cpu_offload = os.getenv("LTX_ENABLE_CPU_OFFLOAD", "true").lower() == "true"
-        enable_sequential_cpu_offload = os.getenv("LTX_ENABLE_SEQUENTIAL_CPU_OFFLOAD", "false").lower() == "true"
-        
-        svc = LTXService(
-            base_model=base, 
-            upsampler_model=up,
-            enable_cpu_offload=enable_cpu_offload,
-            enable_sequential_cpu_offload=enable_sequential_cpu_offload
-        )
-        print("LTX Video service loaded successfully")
-    return svc
-
-def _get_instantid_service():
-    """Lazy load InstantID service only when needed"""
-    global instantid_svc
-    if instantid_svc is None:
-        print("Loading InstantID service...")
-        instantid_base = os.getenv("INSTANTID_BASE_MODEL", "SG161222/RealVisXL_V5.0")
-        
-        # Memory optimization settings
-        enable_cpu_offload = os.getenv("INSTANTID_ENABLE_CPU_OFFLOAD", "true").lower() == "true"
-        enable_sequential_cpu_offload = os.getenv("INSTANTID_ENABLE_SEQUENTIAL_CPU_OFFLOAD", "false").lower() == "true"
-        
-        instantid_svc = InstantIDService(
-            base_model=instantid_base,
-            enable_cpu_offload=enable_cpu_offload,
-            enable_sequential_cpu_offload=enable_sequential_cpu_offload
-        )
-        print("InstantID service loaded successfully")
-    return instantid_svc
+@app.on_event("startup")
+def _load():
+    global svc, instantid_svc
+    
+    # Load LTX Video service
+    base = os.getenv("BASE_MODEL_ID", "Lightricks/LTX-Video-0.9.8-13B-distilled")
+    up = os.getenv("UPSAMPLER_ID", "Lightricks/ltxv-spatial-upscaler-0.9.7")
+    
+    # Memory optimization settings for LTX
+    enable_cpu_offload = os.getenv("LTX_ENABLE_CPU_OFFLOAD", "true").lower() == "true"
+    enable_sequential_cpu_offload = os.getenv("LTX_ENABLE_SEQUENTIAL_CPU_OFFLOAD", "false").lower() == "true"
+    
+    svc = LTXService(
+        base_model=base, 
+        upsampler_model=up,
+        enable_cpu_offload=enable_cpu_offload,
+        enable_sequential_cpu_offload=enable_sequential_cpu_offload
+    )
+    
+    # Load InstantID service
+    instantid_base = os.getenv("INSTANTID_BASE_MODEL", "SG161222/RealVisXL_V5.0")
+    
+    # Memory optimization settings for InstantID
+    enable_cpu_offload = os.getenv("INSTANTID_ENABLE_CPU_OFFLOAD", "true").lower() == "true"
+    enable_sequential_cpu_offload = os.getenv("INSTANTID_ENABLE_SEQUENTIAL_CPU_OFFLOAD", "false").lower() == "true"
+    
+    instantid_svc = InstantIDService(
+        base_model=instantid_base,
+        enable_cpu_offload=enable_cpu_offload,
+        enable_sequential_cpu_offload=enable_sequential_cpu_offload
+    )
 
 @app.post("/i2v")
 async def i2v(
@@ -95,7 +87,7 @@ async def i2v(
         expected_width = max(expected_width, 256)
         expected_height = max(expected_height, 256)
     
-    mp4_path = _get_ltx_service().image_to_video(
+    mp4_path = svc.image_to_video(
         img, prompt,
         negative_prompt=negative_prompt,
         expected_height=expected_height,
@@ -151,7 +143,7 @@ async def instantid(
     face_img = Image.open(io.BytesIO(data)).convert("RGB")
     
     # Generate the image using InstantID
-    image_path = _get_instantid_service().generate_to_file(
+    image_path = instantid_svc.generate_to_file(
         face_image=face_img,
         prompt=prompt,
         negative_prompt=negative_prompt,
