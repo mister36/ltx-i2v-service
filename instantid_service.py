@@ -20,7 +20,7 @@ class InstantIDService:
         dtype=torch.float16,
         checkpoints_dir: str = "./checkpoints",
         models_dir: str = "./models",
-        enable_cpu_offload: bool = True,  # Enable CPU offloading by default
+        enable_cpu_offload: bool = False,  # Disable for faster inference
         enable_sequential_cpu_offload: bool = False,  # For extreme memory savings
     ):
         self.device = device

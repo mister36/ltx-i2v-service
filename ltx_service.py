@@ -16,7 +16,7 @@ class LTXService:
         upsampler_model: str = "Lightricks/ltxv-spatial-upscaler-0.9.7",
         device: str = "cuda",
         dtype = torch.bfloat16,
-        enable_cpu_offload: bool = True,  # Enable CPU offloading by default
+        enable_cpu_offload: bool = False,  # Disable for faster inference
         enable_sequential_cpu_offload: bool = False,  # For extreme memory savings
     ):
         self.device = device
